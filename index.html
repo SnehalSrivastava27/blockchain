@@ -317,8 +317,8 @@
             <h2>Transaction History</h2>
             <div class="history-stats">
                 <div class="stat-box">
-                    <strong>Total Stock Value</strong>
-                    <div class="value" id="totalStockValue">0</div>
+                    <strong>Current Stock Value</strong>
+                    <div class="value" id="currentStockValue">0</div>
                 </div>
                 <div class="stat-box">
                     <strong>Total Transactions</strong>
@@ -936,53 +936,44 @@
             historyList.innerHTML = html;
         }
 
-        function updateHistoryStats() {
-            // Calculate total stock value across all current products
-            let totalValue = 0;
+        async function updateHistoryStats() {
+            // Fetch current stock value from blockchain
+            await calculateCurrentStockValue();
             
-            // Group transactions by product ID to get final stock values
-            const productStocks = {};
-            
-            transactionHistory.forEach(entry => {
-                if (entry.type === 'add') {
-                    if (!productStocks[entry.productId]) {
-                        productStocks[entry.productId] = {
-                            name: entry.productName,
-                            quantity: 0,
-                            price: 0,
-                            value: 0
-                        };
-                    }
-                    productStocks[entry.productId].quantity += entry.quantity;
-                    productStocks[entry.productId].price = entry.price;
-                } else if (entry.type === 'delete') {
-                    if (productStocks[entry.productId]) {
-                        productStocks[entry.productId].quantity = 0;
-                    }
-                } else if (entry.type === 'update') {
-                    if (!productStocks[entry.productId]) {
-                        productStocks[entry.productId] = {
-                            name: entry.productName,
-                            quantity: 0,
-                            price: 0,
-                            value: 0
-                        };
-                    }
-                    productStocks[entry.productId].quantity = entry.quantity;
-                    productStocks[entry.productId].price = entry.price;
-                }
-            });
-
-            // Calculate total value of current inventory
-            for (let productId in productStocks) {
-                const stock = productStocks[productId];
-                if (stock.quantity > 0) {
-                    totalValue += stock.quantity * stock.price;
-                }
-            }
-
-            document.getElementById('totalStockValue').textContent = totalValue.toLocaleString();
+            // Update total transactions count
             document.getElementById('totalTransactions').textContent = transactionHistory.length;
+        }
+
+        async function calculateCurrentStockValue() {
+            try {
+                if (!contract) {
+                    document.getElementById('currentStockValue').textContent = '0';
+                    return;
+                }
+
+                let currentValue = 0;
+                const count = await contract.methods.getTotalProducts().call();
+                
+                // Loop through all products and get current active ones
+                for (let i = 1; i <= count; i++) {
+                    try {
+                        const product = await contract.methods.getProduct(i).call();
+                        // Check if product exists (not deleted)
+                        if (product[4]) {
+                            const quantity = parseInt(product[2]);
+                            const price = parseInt(product[3]);
+                            currentValue += quantity * price;
+                        }
+                    } catch (e) {
+                        // Skip if product doesn't exist
+                    }
+                }
+
+                document.getElementById('currentStockValue').textContent = currentValue.toLocaleString();
+            } catch (error) {
+                console.error('Error calculating current stock value:', error);
+                document.getElementById('currentStockValue').textContent = '0';
+            }
         }
 
         function clearHistory() {
