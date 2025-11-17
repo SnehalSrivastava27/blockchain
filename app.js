@@ -129,8 +129,8 @@ function showImportPreview(products) {
                     </div>
                 `).join('')}
             </div>
-            <button onclick="confirmImportProducts()" style="background-color: #27ae60; margin-right: 10px;">Confirm Import</button>
-            <button onclick="cancelImport()" style="background-color: #e74c3c;">Cancel</button>
+            <button onclick="confirmImportProducts()" style="background-color: #000000ff; margin-right: 10px;">Confirm Import</button>
+            <button onclick="cancelImport()" style="background-color: #000000ff;">Cancel</button>
         </div>
     `;
     previewDiv.innerHTML = html;
