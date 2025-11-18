@@ -136,11 +136,12 @@
                 </div>
             </div>
             <div style="margin-bottom: 15px;">
-                <button onclick="fetchHistoryFromContract()" style="background-color: #000000; margin-top: 0;">Refresh History</button>
+                <button id="refreshHistoryBtn" onclick="fetchHistoryFromContract()" style="background-color: #000000; margin-top: 0;">Refresh History</button>
                 <button onclick="exportProductsToCSV()" style="background-color: #000000;">Export Products CSV</button>
                 <button onclick="exportTransactionHistoryToCSV()" style="background-color: #000000;">Export History CSV</button>
                 <button onclick="exportAllDataToCSV()" style="background-color: #000000;">Export All Data</button>
             </div>
+            <div id="historyStatus" class="status" style="display:none;"></div>
             <div id="exportStatus" class="status"></div>
             <div id="historyList" class="product-list">
                 <p>No transactions yet. Add, update, or delete a product to see history.</p>

@@ -1,5 +1,6 @@
 let web3, contract, account;
 let transactionHistory = [];
+let isFetchingHistory = false; // Prevent concurrent refreshes
 
 // Restore saved contract address when the UI loads
 window.addEventListener('DOMContentLoaded', () => {
@@ -64,11 +65,11 @@ async function importProductsFromCSV() {
                 return showStatus('importStatus', 'CSV file must have a header row and at least one product!', true);
             }
 
-            // Detect delimiter (tab or comma)
+            // Yaha pe hum log delimeter ketaur pe tab ya comma dekh rhe
             const firstLine = lines[0];
             const delimiter = firstLine.includes('\t') ? '\t' : ',';
 
-            // Parse header
+            // Header parsing krenge
             const header = firstLine.split(delimiter).map(h => h.trim().toLowerCase());
             const nameIndex = header.findIndex(h => h.includes('product name') || h === 'product name');
             const quantityIndex = header.findIndex(h => h.includes('quantity') || h === 'quantity');
@@ -78,7 +79,7 @@ async function importProductsFromCSV() {
                 return showStatus('importStatus', 'CSV must have columns: Product Name, Quantity, Price per Unit', true);
             }
 
-            // Parse products
+            //saare products ko parse krenge
             const products = [];
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
@@ -86,7 +87,7 @@ async function importProductsFromCSV() {
 
                 const fields = line.split(delimiter).map(f => f.trim());
                 
-                // Validate we have enough fields
+                // validate krenge rows ko
                 if (fields.length <= Math.max(nameIndex, quantityIndex, priceIndex)) {
                     continue; // Skip malformed rows
                 }
@@ -138,7 +139,7 @@ function showImportPreview(products) {
 
 async function confirmImportProducts() {
     const fileInput = document.getElementById('csvFile');
-    const file = fileInput.files[0];
+    const file = fileInput.files[0]; // only take the first file saari nahi lega
     const reader = new FileReader();
 
     reader.onload = async (e) => {
@@ -156,13 +157,13 @@ async function confirmImportProducts() {
             const priceIndex = header.findIndex(h => h.includes('price') || h === 'price per unit' || h === 'price');
 
             const products = [];
-            for (let i = 1; i < lines.length; i++) {
+            for (let i = 1; i < lines.length; i++) { //saari rows se jayega aur product m append krega
                 const line = lines[i].trim();
                 if (!line) continue;
 
                 const fields = line.split(delimiter).map(f => f.trim());
                 
-                if (fields.length <= Math.max(nameIndex, quantityIndex, priceIndex)) {
+                if (fields.length <= Math.max(nameIndex, quantityIndex, priceIndex)) { //agar ye column nahi to bekar row h
                     continue;
                 }
 
@@ -170,7 +171,7 @@ async function confirmImportProducts() {
                 const quantity = parseInt(fields[quantityIndex], 10);
                 const price = parseInt(fields[priceIndex], 10);
 
-                if (name && !isNaN(quantity) && !isNaN(price) && quantity > 0 && price > 0) {
+                if (name && !isNaN(quantity) && !isNaN(price) && quantity > 0 && price > 0) { // check krega ki row sahi h ya nahi 
                     products.push({ name, quantity, price });
                 }
             }
@@ -181,13 +182,13 @@ async function confirmImportProducts() {
 
             for (const product of products) {
                 try {
-                    await contract.methods.addProduct(product.name, product.quantity, product.price).send({ from: account });
+                    await contract.methods.addProduct(product.name, product.quantity, product.price).send({ from: account }); // yaha blockchain pe store krlega
                     successCount++;
                 } catch (error) {
                     console.error(`Error importing ${product.name}:`, error);
                     errorCount++;
                 }
-                // Small delay between transactions
+                // Small delay between transactions yeh isliye kr rhe taaki multiple upload na hojae aur thora time le jaan buch kar
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
@@ -196,7 +197,7 @@ async function confirmImportProducts() {
             fileInput.value = '';
             
             // Refresh contract data
-            setTimeout(fetchHistoryFromContract, 2000);
+            setTimeout(fetchHistoryFromContract, 500);
         } catch (error) {
             showStatus('importStatus', 'Error during import: ' + error.message, true);
         }
@@ -377,7 +378,19 @@ function showStatus(elementId, message, isError) {
 
 async function fetchHistoryFromContract() {
     try {
-        if (!contract) return showStatus('historyList', 'Contract not initialized. Please configure it first.', true);
+        if (!contract) {
+            return showStatus('historyStatus', 'Contract not initialized. Please configure it first.', true);
+        }
+
+        if (isFetchingHistory) {
+            // Avoid overlapping fetches; optional: inform user lightly
+            return;
+        }
+
+        isFetchingHistory = true;
+        const refreshBtn = document.getElementById('refreshHistoryBtn');
+        if (refreshBtn) refreshBtn.disabled = true;
+        showStatus('historyStatus', 'Refreshing history...', false);
 
         const [addedEvents, updatedEvents, deletedEvents] = await Promise.all([
             contract.getPastEvents('ProductAdded', { fromBlock: 0, toBlock: 'latest' }),
@@ -385,11 +398,21 @@ async function fetchHistoryFromContract() {
             contract.getPastEvents('ProductDeleted', { fromBlock: 0, toBlock: 'latest' })
         ]);
 
+        // Internal map to deal with details
+        // const productNameMap = {};
+        // addedEvents.forEach(e => {
+        //     productNameMap[e.returnValues.id] = e.returnValues.name;
+        // });
+        // updatedEvents.forEach(e => {
+        //     productNameMap[e.returnValues.id] = e.returnValues.name;
+        // });
+
         const parseEvent = (event, type) => ({
             type,
             productId: event.returnValues.id,
             productName: event.returnValues.name,
-            quantity: parseInt(event.returnValues.quantity || 0, 10),
+            // productName: event.returnValues.name || productNameMap[event.returnValues.id] || 'Unknown',
+            quantity: parseInt(event.returnValues.quantity || 0, 10), // 0 hoga by default agar nahi return kr rha aur 10 jo h wo base ko represnt krta h
             price: parseInt(event.returnValues.price || 0, 10),
             get totalValue() { return this.quantity * this.price; },
             blockNumber: event.blockNumber,
@@ -400,7 +423,7 @@ async function fetchHistoryFromContract() {
             ...addedEvents.map(e => parseEvent(e, 'add')),
             ...updatedEvents.map(e => parseEvent(e, 'update')),
             ...deletedEvents.map(e => parseEvent(e, 'delete'))
-        ].sort((a, b) => b.blockNumber - a.blockNumber);
+        ].sort((a, b) => b.blockNumber - a.blockNumber); // yaha pe sort ho rha h descending order m
 
         transactionHistory = await Promise.all(
             historyEvents.map(async event => {
@@ -415,10 +438,16 @@ async function fetchHistoryFromContract() {
         );
 
         updateHistoryDisplay();
-        updateHistoryStats();
+        await updateHistoryStats();
+        showStatus('historyStatus', 'History refreshed successfully.', false);
     } catch (error) {
         console.error('Error fetching history:', error);
-        updateHistoryDisplay();
+        // Do not clear or overwrite the existing history list on transient errors
+        showStatus('historyStatus', 'Failed to refresh history. Please try again.', true);
+    } finally {
+        isFetchingHistory = false;
+        const refreshBtn = document.getElementById('refreshHistoryBtn');
+        if (refreshBtn) refreshBtn.disabled = false;
     }
 }
 
@@ -440,7 +469,7 @@ function updateHistoryDisplay() {
             `,
             delete: `
                 <p><strong>Product ID:</strong> ${entry.productId}</p>
-                <p><strong>Stock Value Removed:</strong> Unknown</p>
+                <p><strong>Product Name:</strong> ${entry.productName}</p>
             `,
             update: `
                 <p><strong>Product ID:</strong> ${entry.productId}</p>
